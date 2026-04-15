@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { updateAsset } from '@/lib/jira'
+import { updateAsset, type UpdateAssetPayload } from '@/lib/jira'
 import { logChange } from '@/lib/changelog'
 
 export async function POST(request: NextRequest) {
@@ -11,7 +11,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const { objectKey, assignedToAccountId, assignedToDisplay, status, locationKey, dateIssued } = body as Record<string, unknown>
+  const {
+    objectKey,
+    assignedToAccountId,
+    assignedToDisplay,
+    status,
+    locationKey,
+    dateIssued,
+    category,
+  } = body as Record<string, unknown>
 
   if (!objectKey || typeof objectKey !== 'string') {
     return NextResponse.json({ error: 'Missing required field: objectKey' }, { status: 400 })
@@ -22,14 +30,19 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await updateAsset({
+    const payload: UpdateAssetPayload = {
       objectKey: objectKey.trim().toUpperCase(),
       assignedToAccountId: typeof assignedToAccountId === 'string' ? assignedToAccountId.trim() : '',
       assignedToDisplay: typeof assignedToDisplay === 'string' ? assignedToDisplay.trim() : '',
       status: status.trim(),
       locationKey: typeof locationKey === 'string' ? locationKey.trim() : '',
       dateIssued: typeof dateIssued === 'string' ? dateIssued.trim() : '',
-    })
+    }
+    if (typeof category === 'string') {
+      payload.category = category.trim()
+    }
+
+    await updateAsset(payload)
 
     // Record change in audit log
     logChange({
@@ -39,6 +52,7 @@ export async function POST(request: NextRequest) {
       status: status.trim(),
       assignedTo: typeof assignedToDisplay === 'string' ? assignedToDisplay.trim() : undefined,
       dateIssued: typeof dateIssued === 'string' ? dateIssued.trim() || undefined : undefined,
+      category: typeof category === 'string' ? category.trim() || undefined : undefined,
     })
 
     return NextResponse.json({ success: true })

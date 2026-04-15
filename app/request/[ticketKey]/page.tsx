@@ -111,9 +111,9 @@ export default function RequestDetailPage() {
   const createdDate = new Date(request.createdDate).toLocaleString()
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full max-w-3xl mx-auto">
       {/* Request Details Card */}
-      <div className="bg-white rounded-2xl shadow-md p-6">
+      <div className="bg-white rounded-2xl shadow-md border border-slate-200/80 p-6">
         <div className="flex items-start justify-between mb-4">
           <div>
             <p className="text-xs text-gray-400 uppercase tracking-widest font-semibold mb-1">Equipment Request</p>

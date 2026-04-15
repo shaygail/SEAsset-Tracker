@@ -23,6 +23,7 @@ export interface ChangeEntry {
   assignedTo?: string     // display name
   location?: string       // display name
   dateIssued?: string     // YYYY-MM-DD
+  category?: string       // Asset Category / sub-type
   reason?: string         // for DELETE
   notes?: string          // extra info (e.g. skipped fields on import)
 }
@@ -88,6 +89,7 @@ export function entriesToCsv(entries: ChangeEntry[]): string {
     'Asset Tag',
     'Object Type',
     'Model',
+    'Category',
     'Status',
     'Assigned To',
     'Location',
@@ -122,6 +124,7 @@ export function entriesToCsv(entries: ChangeEntry[]): string {
       escape(e.assetTag),
       escape(e.objectTypeName),
       escape(e.model),
+      escape(e.category),
       escape(e.status),
       escape(e.assignedTo),
       escape(e.location),

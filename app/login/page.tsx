@@ -31,16 +31,16 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] gap-8">
+    <div className="flex flex-col items-center justify-center min-h-[55vh] gap-8 w-full max-w-md mx-auto px-1">
       <div className="text-center">
-        <div className="text-5xl mb-4">⚡</div>
-        <h1 className="text-3xl font-bold text-gray-900">SE Asset Tracker</h1>
-        <p className="text-gray-500 mt-2">Powerco SE Team · Internal Use Only</p>
+        <div className="text-5xl mb-4" aria-hidden>⚡</div>
+        <h1 className="text-3xl font-bold text-slate-900">SE Asset Tracker</h1>
+        <p className="text-slate-500 mt-2">Powerco SE Team · Internal Use Only</p>
       </div>
 
       <form
         onSubmit={handleSubmit}
-        className="bg-white rounded-2xl shadow-md p-8 w-full max-w-sm flex flex-col gap-4"
+        className="bg-white rounded-2xl shadow-md border border-slate-200/80 p-8 w-full flex flex-col gap-4"
       >
         <div className="flex flex-col gap-1">
           <label htmlFor="username" className="text-sm font-semibold text-gray-700">

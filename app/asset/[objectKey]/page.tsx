@@ -19,11 +19,14 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 function StatusBadge({ status }: { status: string }) {
   const colours: Record<string, string> = {
-    'In Stock': 'bg-green-100 text-green-700',
-    Assigned: 'bg-blue-100 text-blue-700',
-    Returned: 'bg-yellow-100 text-yellow-700',
-    Repair: 'bg-orange-100 text-orange-700',
-    Retired: 'bg-red-100 text-red-700',
+    'In Stock': 'bg-green-100 text-green-800',
+    'Ready to Deploy': 'bg-blue-100 text-blue-800',
+    Issued: 'bg-orange-100 text-orange-800',
+    Assigned: 'bg-blue-100 text-blue-800',
+    Returned: 'bg-yellow-100 text-yellow-800',
+    Faulty: 'bg-red-100 text-red-800',
+    Repair: 'bg-orange-100 text-orange-800',
+    Retired: 'bg-slate-200 text-slate-700',
   }
   const cls = colours[status] ?? 'bg-gray-100 text-gray-600'
   return (
@@ -50,17 +53,19 @@ export default async function AssetPage({ params }: Props) {
     }
     // Show a readable error for configuration / network issues
     return (
-      <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-red-700">
-        <h2 className="font-bold text-lg mb-1">Failed to load asset</h2>
-        <p className="text-sm">{message}</p>
+      <div className="max-w-3xl mx-auto w-full">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-red-700">
+          <h2 className="font-bold text-lg mb-1">Failed to load asset</h2>
+          <p className="text-sm">{message}</p>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-8 w-full max-w-3xl mx-auto">
       {/* Asset details card */}
-      <div className="bg-white rounded-2xl shadow-md p-6">
+      <div className="bg-white rounded-2xl shadow-md border border-slate-200/80 p-6">
         <div className="flex items-start justify-between mb-4">
           <div>
             <p className="text-xs text-gray-400 uppercase tracking-widest font-semibold mb-1">
@@ -79,6 +84,8 @@ export default async function AssetPage({ params }: Props) {
         </div>
 
         <div className="mt-4">
+          <DetailRow label="Type" value={asset.objectTypeName} />
+          <DetailRow label="Category" value={asset.category} />
           <DetailRow label="Model" value={asset.model} />
           <DetailRow label="Manufacturer" value={asset.manufacturer} />
           <DetailRow label="Serial Number" value={asset.serialNumber} />
@@ -94,6 +101,8 @@ export default async function AssetPage({ params }: Props) {
       <AssetAssignForm
         objectKey={asset.objectKey}
         manufacturer={asset.manufacturer}
+        objectTypeName={asset.objectTypeName}
+        currentCategory={asset.category}
         currentAssignedTo={asset.assignedTo}
         currentStatus={asset.status}
         currentLocation={asset.location}

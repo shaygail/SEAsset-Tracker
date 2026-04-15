@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { categorySuggestionsForType } from '@/lib/assetCategories'
 
 interface StatusOption {
   label: string
@@ -21,6 +22,10 @@ interface JiraLocation {
 interface Props {
   objectKey: string
   manufacturer: string
+  /** Jira object type, e.g. Keyboard — used for category suggestions */
+  objectTypeName: string
+  /** Current Asset Category value from Jira */
+  currentCategory: string
   currentAssignedTo: string
   currentStatus: string
   currentLocation: string
@@ -33,6 +38,8 @@ type SubmitState = 'idle' | 'loading' | 'success' | 'error'
 export default function AssetAssignForm({
   objectKey,
   manufacturer,
+  objectTypeName,
+  currentCategory,
   currentAssignedTo,
   currentStatus,
   currentLocation,
@@ -65,8 +72,15 @@ export default function AssetAssignForm({
   const [submitState, setSubmitState] = useState<SubmitState>('idle')
   const [message, setMessage] = useState('')
   const [ticketKey, setTicketKey] = useState('')
+  const [category, setCategory] = useState(currentCategory || '')
 
   const isLoading = submitState === 'loading'
+  const categoryListId = `asset-category-${objectKey.replace(/[^a-zA-Z0-9_-]/g, '')}`
+  const categorySuggestions = categorySuggestionsForType(objectTypeName)
+
+  useEffect(() => {
+    setCategory(currentCategory || '')
+  }, [currentCategory, objectKey])
   
   // Fetch valid status options on mount
   useEffect(() => {
@@ -169,7 +183,15 @@ export default function AssetAssignForm({
       const updateResp = await fetch('/api/jira/updateAsset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ objectKey, assignedToAccountId, assignedToDisplay, status, locationKey, dateIssued }),
+        body: JSON.stringify({
+          objectKey,
+          assignedToAccountId,
+          assignedToDisplay,
+          status,
+          locationKey,
+          dateIssued,
+          category: category.trim(),
+        }),
       })
 
       if (!updateResp.ok) {
@@ -271,6 +293,32 @@ export default function AssetAssignForm({
               ✓ Selected: {selectedUser.displayName} ({selectedUser.email})
             </p>
           )}
+        </div>
+
+        {/* Category — stored in Jira as Asset Category (or Category / …) */}
+        <div className="flex flex-col gap-1">
+          <label htmlFor="category" className="text-sm font-semibold text-gray-600">
+            Category
+          </label>
+          <p className="text-xs text-gray-400 mb-1">
+            e.g. Wired Keyboard, Wireless Mouse. Requires an &ldquo;Asset Category&rdquo; field in Jira for this type.
+          </p>
+          <input
+            id="category"
+            type="text"
+            list={categoryListId}
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            disabled={isLoading}
+            placeholder="e.g. Wired Keyboard"
+            autoComplete="off"
+            className="border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+          />
+          <datalist id={categoryListId}>
+            {categorySuggestions.map((s) => (
+              <option key={s} value={s} />
+            ))}
+          </datalist>
         </div>
 
         {/* Status */}

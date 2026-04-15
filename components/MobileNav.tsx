@@ -8,6 +8,7 @@ const NAV_LINKS = [
   { href: "/", label: "Search" },
   { href: "/dashboard", label: "Dashboard" },
   { href: "/import", label: "Import" },
+  { href: "/receiving-stock", label: "Receive stock" },
   { href: "/import-history", label: "History" },
   { href: "/bulk-operations", label: "Bulk Ops" },
 ];
@@ -43,14 +44,14 @@ export default function MobileNav() {
             className={`fixed top-0 right-0 z-50 w-64 h-full bg-white shadow-lg transform transition-transform duration-200 ${open ? "translate-x-0" : "translate-x-full"}`}
             aria-label="Mobile navigation"
           >
-            <div className="flex items-center justify-between px-4 py-4 border-b">
-              <span className="font-bold text-lg text-blue-700">SE Asset Tracker</span>
+            <div className="flex items-center justify-between px-4 py-4 border-b border-slate-200 bg-slate-50">
+              <span className="font-bold text-lg text-blue-800">SE Asset Tracker</span>
               <button
-                className="p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-700"
+                className="p-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
                 aria-label="Close navigation menu"
                 onClick={() => setOpen(false)}
               >
-                <svg className="w-6 h-6 text-blue-700" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <svg className="w-6 h-6 text-slate-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
@@ -60,7 +61,7 @@ export default function MobileNav() {
                 <li key={link.href}>
                   <Link
                     href={link.href}
-                    className="block px-4 py-3 rounded text-lg text-blue-700 hover:bg-blue-50 font-medium"
+                    className="block px-4 py-3 rounded-lg text-base text-slate-800 hover:bg-blue-50 font-medium"
                     onClick={() => setOpen(false)}
                   >
                     {link.label}

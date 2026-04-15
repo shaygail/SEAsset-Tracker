@@ -1,26 +1,14 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { addRecentlyImported } from '@/lib/recentlyImported'
+import { enrichImportRowsForJira, type ClientImportRow } from '@/lib/importPayloadEnrich'
 import { DEFAULT_OBJECT_TYPE } from '@/lib/jira'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface ImportRow {
-  rowIndex: number
-  objectTypeName: string
-  assetTag: string
-  model: string
-  manufacturer: string
-  serialNumber: string
-  locationName: string
-  status: string
-  dateAdded: string
-  /** True if this row didn't have a type and got assigned the default */
-  usedDefaultType?: boolean
-  /** Detected OS for phones (iPhone/Android) - for better feedback */
-  detectedOS?: string
-}
+/** CSV row shape; aligned with Receiving Stock via {@link enrichImportRowsForJira}. */
+type ImportRow = ClientImportRow
 
 interface ImportResult {
   rowIndex: number
@@ -41,6 +29,7 @@ const TEMPLATES = {
       'Model name',
       'Serial number',
       'Type',
+      'Category',
       'Status',
       'Location',
       'Building',
@@ -48,8 +37,8 @@ const TEMPLATES = {
       'PO number',
     ],
     sampleRows: [
-      'Kensington Pro Fit Ergo Wired,,Keyboard,In Stock,New Plymouth,,,',
-      'Logitech Signature MK650,,Keyboard/Mouse Combo,In Stock,New Plymouth,,,',
+      'Kensington Pro Fit Ergo Wired,,Keyboard,Wired Keyboard,In Stock,New Plymouth,,,',
+      'Logitech Signature MK650,,Keyboard/Mouse Combo,Keyboard/Mouse Combo,In Stock,New Plymouth,,,',
     ],
   },
   phones: {
@@ -60,6 +49,7 @@ const TEMPLATES = {
       'Serial number',
       'Operating System',
       'IMEI',
+      'Category',
       'Status',
       'Location',
       'Building',
@@ -67,8 +57,8 @@ const TEMPLATES = {
       'PO number',
     ],
     sampleRows: [
-      'Samsung S25 FE,Samsung,R5GYB3DVTCF,Android,350833930813399,In Stock,New Plymouth,,,',
-      'Samsung S25 FE,Samsung,R5GYB3DVTEE,Android,350833930813415,In Stock,New Plymouth,,,',
+      'Samsung S25 FE,Samsung,R5GYB3DVTCF,Android,350833930813399,Smartphone,In Stock,New Plymouth,,,',
+      'Samsung S25 FE,Samsung,R5GYB3DVTEE,Android,350833930813415,Smartphone,In Stock,New Plymouth,,,',
     ],
   },
 }
@@ -80,6 +70,7 @@ function mapColumns(headers: string[], row: string[]): {
   serialNumber?: string
   assetTag?: string
   type?: string
+  category?: string
   status?: string
   location?: string
   building?: string
@@ -119,12 +110,16 @@ function mapColumns(headers: string[], row: string[]): {
   const manufacturerIdx = lowerHeaders.findIndex((h) => h === 'manufacturer' || h === 'brand')
   const osIdx = lowerHeaders.findIndex((h) => h.includes('operating system') || h === 'os')
   const imeiIdx = lowerHeaders.findIndex((h) => h === 'imei')
+  const categoryIdx = lowerHeaders.findIndex(
+    (h) => h === 'category' || h.includes('asset category') || h === 'subcategory' || h === 'device category'
+  )
 
   return {
     modelName: row[modelIdx]?.trim(),
     serialNumber: row[serialIdx]?.trim(),
     assetTag: row[assetTagIdx]?.trim(),
     type: row[typeIdx]?.trim(),
+    category: categoryIdx >= 0 ? row[categoryIdx]?.trim() : undefined,
     status: row[statusIdx]?.trim(),
     location: row[locationIdx]?.trim(),
     building: row[buildingIdx]?.trim(),
@@ -231,6 +226,7 @@ function parseRows(text: string, templateHeaders: string[]): { rows: ImportRow[]
     const status = mapped.status?.trim() || 'In Stock'
     const dateAdded = mapped.dateReceived?.trim() || ''
     const manufacturer = mapped.manufacturer?.trim() || ''
+    const category = mapped.category?.trim() || ''
     
     // Asset tag: prefer explicit asset tag, then serial number, then auto-generate
     const assetTag = mapped.assetTag?.trim() || mapped.serialNumber?.trim() || `TA-IMPORT-${String(assetTagCounter++).padStart(3, '0')}`
@@ -242,9 +238,13 @@ function parseRows(text: string, templateHeaders: string[]): { rows: ImportRow[]
       model,
       manufacturer,
       serialNumber,
+      category: category || undefined,
       locationName,
       status,
       dateAdded,
+      imei: mapped.imei?.trim() || undefined,
+      operatingSystem: mapped.operatingSystem?.trim() || undefined,
+      poNumber: mapped.poNumber?.trim() || undefined,
       usedDefaultType,
       // Track detected OS if this is a phone for better feedback
       detectedOS: objectTypeName === 'Phones' ? (mapped.operatingSystem?.trim() || undefined) : undefined,
@@ -307,6 +307,21 @@ export default function ImportPage() {
   const [done, setDone] = useState(false)
   const [filterStatus, setFilterStatus] = useState('')
   const [filterAssetType, setFilterAssetType] = useState('')
+  const [jiraStatusOptions, setJiraStatusOptions] = useState<string[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/jira/statusOptions')
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return
+        setJiraStatusOptions(Array.isArray(data.options) ? data.options : [])
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   function handleFilePick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -338,10 +353,12 @@ export default function ImportPage() {
 
     const allResults: ImportResult[] = []
 
+    const rowsForApi = enrichImportRowsForJira(rows, jiraStatusOptions)
+
     // Send in batches of 5 to avoid hammering the API
     const BATCH = 5
-    for (let i = 0; i < rows.length; i += BATCH) {
-      const batch = rows.slice(i, i + BATCH)
+    for (let i = 0; i < rowsForApi.length; i += BATCH) {
+      const batch = rowsForApi.slice(i, i + BATCH)
       const resp = await fetch('/api/jira/importAssets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -350,7 +367,7 @@ export default function ImportPage() {
       const batchResults: ImportResult[] = await resp.json()
       allResults.push(...batchResults)
       setResults([...allResults])
-      setProgress(Math.min(i + BATCH, rows.length))
+      setProgress(Math.min(i + BATCH, rowsForApi.length))
     }
 
     setImporting(false)
@@ -381,7 +398,12 @@ export default function ImportPage() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Bulk Asset Import</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Upload a CSV file to create multiple new asset records in Jira Assets at once.
+          Upload a CSV file to create multiple new asset records in Jira Assets at once. Dates, status, titles, and
+          phone fields (IMEI, OS, PO) are sent the same way as{' '}
+          <a href="/receiving-stock" className="text-blue-700 underline font-medium hover:text-blue-900">
+            Receive stock
+          </a>
+          .
         </p>
       </div>
 
@@ -450,12 +472,13 @@ export default function ImportPage() {
           <div className="text-xs text-gray-400 space-y-1">
             {selectedTemplate === 'phones' ? (
               <>
-                <div><span className="font-semibold text-gray-600">Fields:</span> Model, Manufacturer, Serial number, OS, IMEI</div>
+                <div><span className="font-semibold text-gray-600">Fields:</span> Model, Manufacturer, Serial number, OS, IMEI, optional Category</div>
                 <div><span className="font-semibold text-gray-600">Notes:</span> IMEI or serial can be used for auto-tagging. Status defaults to "In Stock" if blank.</div>
               </>
             ) : (
               <>
                 <div><span className="font-semibold text-gray-600">Supported Types:</span> Keyboard · Mouse · Monitor · Laptop · Desktop · Docking Station · Headset · Keyboard/Mouse Combo</div>
+                <div><span className="font-semibold text-gray-600">Category (optional):</span> e.g. Wired Keyboard, Wireless Mouse — stored in Jira as Asset Category when that field exists.</div>
                 <div><span className="font-semibold text-gray-600">Notes:</span> Serial number or asset tag will be used for auto-tagging. Status defaults to "In Stock" if blank.</div>
               </>
             )}
@@ -578,6 +601,7 @@ export default function ImportPage() {
                 <tr>
                   <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">#</th>
                   <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Type</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Category</th>
                   <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Asset Tag</th>
                   <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Model</th>
                   <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">Serial #</th>
@@ -590,7 +614,7 @@ export default function ImportPage() {
               <tbody className="divide-y divide-gray-100">
                 {rows
                   .filter((row) => {
-                    if (filterStatus && row.status !== filterStatus) return false
+                    if (filterStatus && (row.status ?? '') !== filterStatus) return false
                     if (filterAssetType && row.objectTypeName !== filterAssetType) return false
                     return true
                   })
@@ -609,11 +633,12 @@ export default function ImportPage() {
                     >
                       <td className="px-3 py-2 text-gray-400 text-xs">{row.rowIndex}</td>
                       <td className="px-3 py-2 text-gray-800 font-medium">{row.objectTypeName}</td>
+                      <td className="px-3 py-2 text-gray-700 text-xs">{row.category || '—'}</td>
                       <td className="px-3 py-2 text-gray-700 text-xs">{row.assetTag || '—'}</td>
                       <td className="px-3 py-2 text-gray-700 text-xs">{row.model || '—'}</td>
                       <td className="px-3 py-2 text-gray-700 text-xs">{row.serialNumber || '—'}</td>
                       <td className="px-3 py-2 text-gray-700 text-xs">{row.locationName || '—'}</td>
-                      <td className="px-3 py-2"><StatusBadge status={row.status} /></td>
+                      <td className="px-3 py-2"><StatusBadge status={row.status ?? ''} /></td>
                       <td className="px-3 py-2 text-gray-700 text-xs">{row.dateAdded || '—'}</td>
                       {results.length > 0 && (
                         <td className="px-3 py-2 text-xs">

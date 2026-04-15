@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { QRCodeSVG } from 'qrcode.react'
 import type { AssetListItem } from '@/lib/jira'
@@ -15,17 +15,6 @@ const STATUS_TABS = [
   { label: 'Faulty', value: 'Faulty' },
 ]
 
-const ASSET_TYPES = [
-  { label: 'All Assets', value: '' },
-  { label: 'Keyboard', value: 'Keyboard' },
-  { label: 'Mouse', value: 'Mouse' },
-  { label: 'Monitor', value: 'Monitor' },
-  { label: 'Laptop', value: 'Laptop' },
-  { label: 'Desktop', value: 'Desktop' },
-  { label: 'Docking Station', value: 'Docking Station' },
-  { label: 'Headset', value: 'Headset' },
-]
-
 const STATUS_COLOURS: Record<string, string> = {
   'In Stock': 'bg-green-100 text-green-700',
   'Ready to Deploy': 'bg-blue-100 text-blue-700',
@@ -38,6 +27,7 @@ export default function DashboardPage() {
   const [assets, setAssets] = useState<AssetListItem[]>([])
   const [activeTab, setActiveTab] = useState('')
   const [selectedAssetType, setSelectedAssetType] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -83,8 +73,22 @@ export default function DashboardPage() {
     fetchAssets(activeTab, selectedAssetType)
   }, [activeTab, selectedAssetType, fetchAssets])
 
+  const categoryOptions = useMemo(() => {
+    const uniq = new Set<string>()
+    for (const a of assets) {
+      const c = (a.category || '').trim()
+      if (c) uniq.add(c)
+    }
+    return Array.from(uniq).sort((x, y) => x.localeCompare(y))
+  }, [assets])
+
+  const displayedAssets = useMemo(() => {
+    if (!selectedCategory) return assets
+    return assets.filter((a) => (a.category || '').trim() === selectedCategory)
+  }, [assets, selectedCategory])
+
   return (
-    <div className="flex flex-col gap-8 px-2 w-full max-w-2xl mx-auto">
+    <div className="flex flex-col gap-8 w-full">
       {/* Pending Equipment Requests Section */}
       <PendingRequestsSection />
 
@@ -94,7 +98,7 @@ export default function DashboardPage() {
           <h1 className="text-3xl font-bold text-gray-900">Asset Dashboard</h1>
           <p className="text-gray-500 text-sm mt-1">Scan a QR code to view and assign any asset</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <button
             onClick={() => window.print()}
             className="flex items-center gap-2 text-sm bg-gray-800 hover:bg-gray-900 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
@@ -134,7 +138,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Export section */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-5 sm:px-6 print:hidden">
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm px-4 py-5 sm:px-6 print:hidden">
         <h2 className="text-base font-bold text-gray-800 mb-3">Export Monthly Change Log</h2>
         <p className="text-sm text-gray-500 mb-4">
           Download a CSV of all asset creates, updates, and deletes recorded this month.
@@ -213,7 +217,10 @@ export default function DashboardPage() {
           return availableTypes.map((type) => (
             <button
               key={type.value}
-              onClick={() => setSelectedAssetType(selectedAssetType === type.value ? '' : type.value)}
+              onClick={() => {
+                setSelectedAssetType(selectedAssetType === type.value ? '' : type.value)
+                setSelectedCategory('')
+              }}
               className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
                 selectedAssetType === type.value
                   ? 'bg-green-700 text-white'
@@ -225,6 +232,39 @@ export default function DashboardPage() {
           ))
         })()}
       </div>
+
+      {/* Category filter (wired / wireless / … from Jira Asset Category) */}
+      {categoryOptions.length > 0 && (
+        <div className="flex gap-2 flex-wrap print:hidden mb-2 items-center">
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide w-full sm:w-auto sm:mr-1">Category</span>
+          <button
+            type="button"
+            onClick={() => setSelectedCategory('')}
+            className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
+              selectedCategory === ''
+                ? 'bg-violet-700 text-white'
+                : 'bg-white text-gray-600 border border-gray-300 hover:border-violet-400 hover:text-violet-800'
+            }`}
+          >
+            All
+          </button>
+          {categoryOptions.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setSelectedCategory(selectedCategory === cat ? '' : cat)}
+              className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors max-w-full truncate ${
+                selectedCategory === cat
+                  ? 'bg-violet-700 text-white'
+                  : 'bg-white text-gray-600 border border-gray-300 hover:border-violet-400 hover:text-violet-800'
+              }`}
+              title={cat}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Loading */}
       {loading && (
@@ -253,22 +293,38 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {!loading && !error && assets.length > 0 && displayedAssets.length === 0 && (
+        <div className="text-center py-12 text-gray-400 print:hidden">
+          <p className="text-lg font-medium">No assets in this category</p>
+          <p className="text-sm mt-1">Clear the category filter or pick another value</p>
+        </div>
+      )}
+
       {/* Asset grid */}
-      {!loading && !error && assets.length > 0 && (
+      {!loading && !error && displayedAssets.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 print:grid-cols-3 print:gap-4">
-          {assets.map((asset) => {
+          {displayedAssets.map((asset) => {
             const jiraUrl = `${process.env.NEXT_PUBLIC_JIRA_BASE_URL ?? 'https://powerco.atlassian.net'}/jira/assets/object/${asset.objectId}`
             const statusCls = STATUS_COLOURS[asset.status] ?? 'bg-gray-100 text-gray-600'
             return (
               <div
                 key={asset.objectKey}
-                className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-col gap-4 hover:shadow-md transition-shadow print:shadow-none print:border print:border-gray-300 print:rounded-xl print:break-inside-avoid"
+                className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-4 flex flex-col gap-4 hover:shadow-md hover:border-slate-300 transition-all print:shadow-none print:border print:border-gray-300 print:rounded-xl print:break-inside-avoid"
               >
                 {/* Asset info */}
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide">{asset.objectKey}</p>
                     <p className="text-base font-bold text-gray-900 leading-tight mt-0.5">{asset.model || asset.label}</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      <span className="font-semibold text-gray-600">{asset.objectTypeName}</span>
+                      {asset.category ? (
+                        <span className="text-gray-400"> · </span>
+                      ) : null}
+                      {asset.category ? (
+                        <span className="text-violet-700 font-medium">{asset.category}</span>
+                      ) : null}
+                    </p>
                     {asset.serialNumber && (
                       <p className="text-xs text-gray-400 mt-1">S/N: {asset.serialNumber}</p>
                     )}

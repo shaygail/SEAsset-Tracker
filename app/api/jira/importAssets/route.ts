@@ -77,6 +77,7 @@ export async function POST(req: NextRequest) {
         assetTag: payload.assetTag,
         objectTypeName: payload.objectTypeName,
         model: payload.model,
+        category: payload.category,
         status: payload.status,
         location: payload.locationName,
         dateIssued: payload.dateAdded,

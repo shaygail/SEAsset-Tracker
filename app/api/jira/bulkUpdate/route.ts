@@ -7,6 +7,7 @@ interface BulkUpdatePayload {
   locationName?: string
   building?: string
   assignedToDisplay?: string
+  category?: string
 }
 
 async function resolveLocationId(locationName: string): Promise<string> {
@@ -84,6 +85,9 @@ export async function POST(req: NextRequest) {
         locationKey: locationKey || current.locationKey,
         building: payload.building || undefined,
         dateIssued: '',
+      }
+      if (payload.category !== undefined) {
+        updatePayload.category = payload.category
       }
 
       await updateAsset(updatePayload)

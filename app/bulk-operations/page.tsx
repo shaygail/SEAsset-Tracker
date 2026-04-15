@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { getRecentlyImported, clearRecentlyImported } from '@/lib/recentlyImported'
+import { ALL_CATEGORY_SUGGESTIONS } from '@/lib/assetCategories'
 
 interface RecentAsset {
   objectKey: string
@@ -28,6 +29,7 @@ export default function BulkOperationsPage() {
   const [location, setLocation] = useState('')
   const [building, setBuilding] = useState('')
   const [assignedTo, setAssignedTo] = useState('')
+  const [bulkCategory, setBulkCategory] = useState('')
   const [objectTypeFilter, setObjectTypeFilter] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
@@ -129,7 +131,7 @@ export default function BulkOperationsPage() {
       setError('Please select at least one asset')
       return
     }
-    if (!status && !location && !building && !assignedTo) {
+    if (!status && !location && !building && !assignedTo && !bulkCategory.trim()) {
       setError('Please select at least one field to update')
       return
     }
@@ -148,6 +150,7 @@ export default function BulkOperationsPage() {
           locationName: location || undefined,
           building: building || undefined,
           assignedToDisplay: assignedTo || undefined,
+          ...(bulkCategory.trim() ? { category: bulkCategory.trim() } : {}),
         }),
       })
 
@@ -331,6 +334,24 @@ export default function BulkOperationsPage() {
               placeholder="user@example.com"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Category (Asset Category)</label>
+            <input
+              type="text"
+              list="bulk-category-suggestions"
+              value={bulkCategory}
+              onChange={(e) => setBulkCategory(e.target.value)}
+              placeholder="e.g. Wired Keyboard — leave blank for no change"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+            <datalist id="bulk-category-suggestions">
+              {ALL_CATEGORY_SUGGESTIONS.map((s) => (
+                <option key={s} value={s} />
+              ))}
+            </datalist>
+            <p className="text-xs text-gray-500 mt-1">Requires Asset Category (or equivalent) on the object type in Jira</p>
           </div>
         </div>
 

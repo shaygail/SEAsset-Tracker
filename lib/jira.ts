@@ -4,10 +4,20 @@
  * Never import this file in client components.
  */
 
+/** Jira attribute names tried in order for asset sub-type (e.g. Wired Keyboard). Add "Asset Category" in Jira Assets schema for best results. */
+export const ASSET_CATEGORY_ATTRIBUTE_NAMES = [
+  'Asset Category',
+  'Category',
+  'Device Category',
+  'Subcategory',
+] as const
+
 export interface JiraAsset {
   /** Numeric Jira object ID — used for DELETE and direct Jira URLs */
   objectId: string
   objectKey: string
+  /** Jira object type name, e.g. Keyboard, Computer */
+  objectTypeName: string
   model: string
   manufacturer: string
   serialNumber: string
@@ -17,6 +27,8 @@ export interface JiraAsset {
   location: string
   /** Raw object ID/key for the Location reference (used when updating via Jira API) */
   locationKey: string
+  /** Optional finer classification, e.g. Wired Keyboard — from Asset Category or similar attribute */
+  category: string
   /** Raw attributes returned by Jira Assets for extensibility */
   rawAttributes: Record<string, string>
 }
@@ -32,6 +44,8 @@ export interface UpdateAssetPayload {
   building?: string
   /** ISO date string YYYY-MM-DD for the "Date Issued" attribute */
   dateIssued: string
+  /** Set only when updating; must match a Jira attribute (Asset Category, Category, …) */
+  category?: string
 }
 
 export interface CreateTicketPayload {
@@ -141,6 +155,14 @@ interface JiraRawAttribute {
   objectAttributeValues?: Array<{ value?: string; displayValue?: string }>
 }
 
+function getCategoryAttributeValue(attrs: JiraRawAttribute[]): string {
+  for (const name of ASSET_CATEGORY_ATTRIBUTE_NAMES) {
+    const v = getAttribute(attrs, name)
+    if (v) return v
+  }
+  return ''
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -205,9 +227,13 @@ export async function fetchAsset(query: string): Promise<JiraAsset> {
     rawAttributes[attrName] = getAttribute(attrs, attrName)
   }
 
+  const objectTypeName =
+    (obj.objectType as { name?: string } | undefined)?.name ?? 'Unknown'
+
   return {
     objectId: String(objectId),
     objectKey: obj.objectKey ?? query,
+    objectTypeName,
     // 'Model name' is the label attribute in the Powerco schema
     model: getAttribute(attrs, 'Model name') || getAttribute(attrs, 'Model') || obj.label || '',
     manufacturer: getAttribute(attrs, 'Manufacturer') || getAttribute(attrs, 'Vendor') || '',
@@ -219,6 +245,7 @@ export async function fetchAsset(query: string): Promise<JiraAsset> {
     location: getAttribute(attrs, 'Location') || '',
     // Raw numeric object ID used when sending updates back to Jira Assets
     locationKey: getAttributeRawValue(attrs, 'Location') || '',
+    category: getCategoryAttributeValue(attrs),
     rawAttributes,
   }
 }
@@ -309,6 +336,14 @@ export async function updateAsset(payload: UpdateAssetPayload): Promise<void> {
     attributesToUpdate.push({ objectTypeAttributeId: dateIssuedId, objectAttributeValues: [{ value: isoDateTime }] })
   }
 
+  const categoryId = findAttrId(...ASSET_CATEGORY_ATTRIBUTE_NAMES)
+  if (categoryId !== undefined && payload.category !== undefined) {
+    attributesToUpdate.push({
+      objectTypeAttributeId: categoryId,
+      objectAttributeValues: [{ value: payload.category }],
+    })
+  }
+
   // Step 3: Update the object
   const updateResp = await fetch(`${assetsBase}/object/${objectId}`, {
     method: 'PUT',
@@ -337,13 +372,19 @@ export interface AssetListItem {
   assignedTo: string
   location: string
   objectTypeName: string
+  /** From Asset Category / Category / … when present in Jira */
+  category: string
 }
 
 /**
- * List assets from Jira Assets, optionally filtered by status and/or asset type.
- * Uses 2 API calls: one AQL query + one schema fetch to resolve attribute names.
+ * List assets from Jira Assets, optionally filtered by status, asset type, and/or category.
+ * Resolves attribute names per object type so mixed-type result sets map correctly.
  */
-export async function listAssets(statusFilter?: string, typeFilter?: string): Promise<AssetListItem[]> {
+export async function listAssets(
+  statusFilter?: string,
+  typeFilter?: string,
+  categoryFilter?: string
+): Promise<AssetListItem[]> {
   const assetsBase = getAssetsApiBase()
   const headers = getAuthHeaders()
 
@@ -357,12 +398,16 @@ export async function listAssets(statusFilter?: string, typeFilter?: string): Pr
   const typePart = typeFilter
     ? `objectType = "${typeFilter}"`
     : ''
-  
-  if (statusPart && typePart) {
-    qlQuery = `${statusPart} AND ${typePart}`
-  } else {
-    qlQuery = statusPart || typePart
-  }
+
+  const categoryAqlName =
+    process.env.JIRA_CATEGORY_AQL_ATTRIBUTE?.trim() || 'Asset Category'
+  const safeCategory =
+    categoryFilter?.replace(/\\/g, '').replace(/"/g, '') ?? ''
+  const categoryPart =
+    safeCategory ? `"${categoryAqlName}" = "${safeCategory}"` : ''
+
+  const parts = [statusPart, typePart, categoryPart].filter(Boolean)
+  qlQuery = parts.join(' AND ')
 
   const params = new URLSearchParams({
     qlQuery,
@@ -410,32 +455,38 @@ export async function listAssets(statusFilter?: string, typeFilter?: string): Pr
     }
   }
 
-  // Fetch attribute schema once to map attribute ID → name
-  const objectTypeId = entries[0].objectType?.id
-  const attrIdToName: Record<string, string> = {}
-
-  if (objectTypeId) {
-    const schemaResp = await fetch(`${assetsBase}/objecttype/${objectTypeId}/attributes`, {
+  const attrIdToNameByType: Record<string, Record<string, string>> = {}
+  for (const typeId of uniqueTypeIds) {
+    const schemaResp = await fetch(`${assetsBase}/objecttype/${typeId}/attributes`, {
       headers,
       cache: 'no-store',
     })
-    if (schemaResp.ok) {
-      const attrTypes: Array<{ id: string; name: string }> = await schemaResp.json() ?? []
-      for (const a of attrTypes) {
-        attrIdToName[String(a.id)] = a.name
-      }
+    if (!schemaResp.ok) continue
+    const attrTypes: Array<{ id: string; name: string }> = (await schemaResp.json()) ?? []
+    const map: Record<string, string> = {}
+    for (const a of attrTypes) {
+      map[String(a.id)] = a.name
     }
+    attrIdToNameByType[String(typeId)] = map
   }
 
   return entries.map((obj) => {
+    const typeId = String(obj.objectType?.id ?? '')
+    const idToName = attrIdToNameByType[typeId] ?? {}
     const attrMap: Record<string, string> = {}
     for (const attr of obj.attributes ?? []) {
-      const name = attrIdToName[String(attr.objectTypeAttributeId)]
+      const name = idToName[String(attr.objectTypeAttributeId)]
       if (name && attr.objectAttributeValues?.length) {
         const val = attr.objectAttributeValues[0]
         attrMap[name.toLowerCase()] = val.displayValue ?? val.value ?? ''
       }
     }
+    const category =
+      attrMap['asset category'] ||
+      attrMap['category'] ||
+      attrMap['device category'] ||
+      attrMap['subcategory'] ||
+      ''
     return {
       objectId: String(obj.id ?? ''),
       objectKey: obj.objectKey ?? '',
@@ -445,7 +496,8 @@ export async function listAssets(statusFilter?: string, typeFilter?: string): Pr
       status: attrMap['status'] || '',
       assignedTo: attrMap['assigned to'] || attrMap['owner'] || '',
       location: attrMap['location'] || '',
-      objectTypeName: objectTypeIdToName[String(obj.objectType?.id)] || 'Unknown',
+      objectTypeName: objectTypeIdToName[typeId] || 'Unknown',
+      category,
     }
   })
 }
@@ -462,6 +514,28 @@ export interface CreateAssetPayload {
   status?: string
   /** ISO date string YYYY-MM-DD */
   dateAdded?: string
+  /** Finer type, e.g. Wired Keyboard — maps to Asset Category (or Category, …) in Jira */
+  category?: string
+  /** Mobile / phone identifiers — attribute must exist on the object type in Jira */
+  imei?: string
+  /** ISO date string YYYY-MM-DD — maps if a warranty-style date attribute exists */
+  warrantyExpiry?: string
+  operatingSystem?: string
+  poNumber?: string
+  notes?: string
+  /**
+   * Preferred display name / label for the asset (Receiving Stock titles).
+   * TODO: Confirm the attribute name in your schema (Name, Label, Asset name, …).
+   */
+  assetLabel?: string
+}
+
+export interface CreateAssetDetails {
+  objectKey: string
+  /** Numeric Jira Assets object id (for deep links `/jira/assets/object/{id}`) */
+  objectId: string
+  /** Human-readable notes when optional fields were skipped (e.g. Select mismatch) */
+  skippedFieldNotes?: string
 }
 
 /**
@@ -616,9 +690,9 @@ async function resolveLocationId(locationName: string): Promise<string> {
 
 /**
  * Create a new asset object in Jira Assets.
- * Returns the new object key (e.g. "TA-612").
+ * Returns structured metadata (object key, numeric id, optional skipped-field notes).
  */
-export async function createAsset(payload: CreateAssetPayload): Promise<string> {
+export async function createAssetWithDetails(payload: CreateAssetPayload): Promise<CreateAssetDetails> {
   const assetsBase = getAssetsApiBase()
   const headers = getAuthHeaders()
 
@@ -678,6 +752,7 @@ export async function createAsset(payload: CreateAssetPayload): Promise<string> 
   push('Model name', payload.model, 'Model')
   push('Manufacturer', payload.manufacturer, 'Vendor')
   push('Serial Number', payload.serialNumber, 'Serial')
+  push('IMEI', payload.imei, 'Imei')
   // Status is often a required field in Jira Assets, so always include if provided
   if (payload.status) {
     push('Status', payload.status)
@@ -695,6 +770,20 @@ export async function createAsset(payload: CreateAssetPayload): Promise<string> 
     const iso = payload.dateAdded.includes('T') ? payload.dateAdded : `${payload.dateAdded}T00:00:00.000Z`
     push('Date received', iso, 'Date Received', 'Date Added', 'Date Issued', 'Date added')
   }
+
+  if (payload.warrantyExpiry) {
+    const iso = payload.warrantyExpiry.includes('T')
+      ? payload.warrantyExpiry
+      : `${payload.warrantyExpiry}T00:00:00.000Z`
+    push('Warranty expiry', iso, 'Warranty Expiry', 'End of warranty', 'Warranty end', 'Warranty')
+  }
+
+  push('Operating System', payload.operatingSystem, 'OS', 'Mobile OS', 'Operating system')
+  push('PO number', payload.poNumber, 'PO Number', 'Purchase order', 'PO')
+  push('Notes', payload.notes, 'Comments', 'Description')
+  push('Name', payload.assetLabel, 'Label', 'Asset name', 'Summary', 'Title')
+
+  push('Asset Category', payload.category, 'Category', 'Device Category', 'Subcategory')
 
   // Ensure at least one attribute is provided
   if (attributes.length === 0) {
@@ -739,9 +828,19 @@ export async function createAsset(payload: CreateAssetPayload): Promise<string> 
   const created = await createResp.json()
 
   const objectKey = (created.objectKey ?? String(created.id)) as string
-  if (skippedFields.length > 0) {
-    // Return key but append a note about skipped fields (caller can surface this)
-    return `${objectKey} (note: skipped fields — ${skippedFields.join('; ')})`
+  const objectId = String(created.id ?? '')
+  const skippedFieldNotes = skippedFields.length > 0 ? skippedFields.join('; ') : undefined
+  return { objectKey, objectId, skippedFieldNotes }
+}
+
+/**
+ * Create a new asset object in Jira Assets.
+ * Returns the new object key (e.g. "TA-612"), optionally with skipped-field suffix.
+ */
+export async function createAsset(payload: CreateAssetPayload): Promise<string> {
+  const { objectKey, skippedFieldNotes } = await createAssetWithDetails(payload)
+  if (skippedFieldNotes) {
+    return `${objectKey} (note: skipped fields — ${skippedFieldNotes})`
   }
   return objectKey
 }
@@ -1061,7 +1160,7 @@ export async function searchPendingRequests(): Promise<EquipmentRequest[]> {
     
     console.log('[searchPendingRequests] JQL:', jql)
 
-    const url = `${sandboxUrl.replace(/\/$/, '')}/rest/api/3/search/jql`
+    const url = `${sandboxUrl.replace(/\/$/, '')}/rest/api/3/search`
     
     const response = await fetch(url, {
       method: 'POST',
@@ -1081,6 +1180,7 @@ export async function searchPendingRequests(): Promise<EquipmentRequest[]> {
     }
 
     const data = await response.json()
+    console.log('[searchPendingRequests] Raw Jira API response:', JSON.stringify(data, null, 2));
     const issues = data.issues ?? []
     
     console.log(`[searchPendingRequests] Found ${issues.length} New Starter Kit tickets`)

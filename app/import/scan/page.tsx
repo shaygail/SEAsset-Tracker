@@ -2,6 +2,8 @@
 import { useState, useEffect } from "react";
 import BarcodeScanner from "@/components/barcode/BarcodeScanner";
 import ManualBarcodeEntry from "@/components/barcode/ManualBarcodeEntry";
+import { enrichImportRowsForJira, type ClientImportRow } from "@/lib/importPayloadEnrich";
+import { DEFAULT_OBJECT_TYPE } from "@/lib/jira";
 
 export default function ImportScanPage() {
   const [barcode, setBarcode] = useState<string | null>(null);
@@ -13,6 +15,21 @@ export default function ImportScanPage() {
   const [result, setResult] = useState<any>(null);
   const [assetPreview, setAssetPreview] = useState<any>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [jiraStatusOptions, setJiraStatusOptions] = useState<string[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/jira/statusOptions")
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        setJiraStatusOptions(Array.isArray(data.options) ? data.options : []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function handleDetected(code: string) {
     setBarcode(code);
@@ -35,13 +52,27 @@ export default function ImportScanPage() {
   }, [step, barcode]);
 
   async function handleSubmit() {
+    if (!barcode?.trim()) return;
     setLoading(true);
     setError("");
     try {
+      const tag = barcode.trim();
+      const rawRows: ClientImportRow[] = Array.from({ length: quantity }, (_, i) => ({
+        rowIndex: i + 1,
+        objectTypeName: DEFAULT_OBJECT_TYPE,
+        assetTag: tag,
+        model: tag,
+        manufacturer: "",
+        serialNumber: "",
+        locationName: "",
+        status: "In Stock",
+        dateAdded: "",
+      }));
+      const rows = enrichImportRowsForJira(rawRows, jiraStatusOptions);
       const resp = await fetch("/api/jira/importAssets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(Array(quantity).fill({ assetTag: barcode })),
+        body: JSON.stringify(rows),
       });
       const data = await resp.json();
       setResult(data);
