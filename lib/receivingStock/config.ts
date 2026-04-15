@@ -99,11 +99,8 @@ export const COMMON_MANUFACTURERS: string[] = [
   'Samsung',
   'Logitech',
   'Cisco',
-  'Poly',
   'Jabra',
-  'BenQ',
-  'LG',
-  'ASUS',
-  'Acer',
+  'Philips',
+  'Neat',
   'Other',
 ]
