@@ -65,6 +65,25 @@ const TEMPLATES = {
 
 type TemplateKey = keyof typeof TEMPLATES
 
+function inferMonitorCategory(modelName: string, providedCategory?: string): string | undefined {
+  const category = (providedCategory || '').trim()
+  const modelLower = modelName.toLowerCase()
+  const categoryLower = category.toLowerCase()
+
+  if (categoryLower.includes('curved') || categoryLower.includes('34')) return 'Monitor Curved 34"'
+  if (categoryLower.includes('43')) return 'Monitor 43"'
+  if (categoryLower.includes('24')) return 'Monitor 24"'
+
+  // Known 24" model currently imported without category.
+  if (modelLower.includes('philips 243b1') || modelLower.includes('243b1')) return 'Monitor 24"'
+
+  if (modelLower.includes('curved') || modelLower.includes('34')) return 'Monitor Curved 34"'
+  if (modelLower.includes('43')) return 'Monitor 43"'
+  if (modelLower.includes('24')) return 'Monitor 24"'
+
+  return undefined
+}
+
 function mapColumns(headers: string[], row: string[]): {
   modelName?: string
   serialNumber?: string
@@ -198,10 +217,20 @@ function parseRows(text: string, templateHeaders: string[]): { rows: ImportRow[]
       const modelLower = (mapped.modelName || '').toLowerCase()
       const manufacturerLower = (mapped.manufacturer || '').toLowerCase()
       const osLower = (mapped.operatingSystem || '').toLowerCase()
+      const inferredMonitorCategory = inferMonitorCategory(mapped.modelName || '', mapped.category)
       
       // Check for phone-specific fields (Operating System, IMEI)
       if (mapped.operatingSystem || mapped.imei || manufacturerLower.includes('apple') || manufacturerLower.includes('samsung')) {
         objectTypeName = 'Phones'
+      }
+      // Check for monitor signals in model/category text
+      else if (
+        inferredMonitorCategory ||
+        modelLower.includes('monitor') ||
+        modelLower.includes('display') ||
+        modelLower.includes('screen')
+      ) {
+        objectTypeName = 'Monitor'
       }
       // Check for docking station keywords in model name or manufacturer
       else if (
@@ -227,6 +256,8 @@ function parseRows(text: string, templateHeaders: string[]): { rows: ImportRow[]
     const dateAdded = mapped.dateReceived?.trim() || ''
     const manufacturer = mapped.manufacturer?.trim() || ''
     const category = mapped.category?.trim() || ''
+    const inferredMonitorCategory = inferMonitorCategory(model, category)
+    const finalCategory = objectTypeName === 'Monitor' ? (inferredMonitorCategory || category) : category
     
     // Asset tag: prefer explicit asset tag, then serial number, then auto-generate
     const assetTag = mapped.assetTag?.trim() || mapped.serialNumber?.trim() || `TA-IMPORT-${String(assetTagCounter++).padStart(3, '0')}`
@@ -238,7 +269,7 @@ function parseRows(text: string, templateHeaders: string[]): { rows: ImportRow[]
       model,
       manufacturer,
       serialNumber,
-      category: category || undefined,
+      category: finalCategory || undefined,
       locationName,
       status,
       dateAdded,
@@ -478,7 +509,7 @@ export default function ImportPage() {
             ) : (
               <>
                 <div><span className="font-semibold text-gray-600">Supported Types:</span> Keyboard · Mouse · Monitor · Laptop · Desktop · Docking Station · Headset · Keyboard/Mouse Combo</div>
-                <div><span className="font-semibold text-gray-600">Category (optional):</span> e.g. Wired Keyboard, Wireless Mouse — stored in Jira as Asset Category when that field exists.</div>
+                <div><span className="font-semibold text-gray-600">Category (optional):</span> e.g. Wired Keyboard, Wireless Mouse, Monitor 24&quot;, Monitor Curved 34&quot;, Monitor 43&quot; — stored in Jira as Asset Category when that field exists.</div>
                 <div><span className="font-semibold text-gray-600">Notes:</span> Serial number or asset tag will be used for auto-tagging. Status defaults to "In Stock" if blank.</div>
               </>
             )}
