@@ -84,6 +84,23 @@ function inferMonitorCategory(modelName: string, providedCategory?: string): str
   return undefined
 }
 
+function normalizeObjectTypeName(providedType?: string): string | undefined {
+  const raw = (providedType || '').trim()
+  if (!raw) return undefined
+  const lower = raw.toLowerCase()
+
+  if (
+    lower === 'monitor' ||
+    lower.startsWith('monitor 24') ||
+    lower.startsWith('monitor curved 34') ||
+    lower.startsWith('monitor 43')
+  ) {
+    return 'Monitor'
+  }
+
+  return raw
+}
+
 function mapColumns(headers: string[], row: string[]): {
   modelName?: string
   serialNumber?: string
@@ -210,7 +227,7 @@ function parseRows(text: string, templateHeaders: string[]): { rows: ImportRow[]
 
     // Auto-detect asset type based on column presence and model name
     const providedType = mapped.type?.trim()
-    let objectTypeName = providedType
+    let objectTypeName = normalizeObjectTypeName(providedType)
     let usedDefaultType = false
 
     if (!objectTypeName) {
@@ -256,8 +273,12 @@ function parseRows(text: string, templateHeaders: string[]): { rows: ImportRow[]
     const dateAdded = mapped.dateReceived?.trim() || ''
     const manufacturer = mapped.manufacturer?.trim() || ''
     const category = mapped.category?.trim() || ''
+    const typeAsMonitorCategory = inferMonitorCategory('', providedType)
     const inferredMonitorCategory = inferMonitorCategory(model, category)
-    const finalCategory = objectTypeName === 'Monitor' ? (inferredMonitorCategory || category) : category
+    const finalCategory =
+      objectTypeName === 'Monitor'
+        ? (inferredMonitorCategory || typeAsMonitorCategory || category)
+        : category
     
     // Asset tag: prefer explicit asset tag, then serial number, then auto-generate
     const assetTag = mapped.assetTag?.trim() || mapped.serialNumber?.trim() || `TA-IMPORT-${String(assetTagCounter++).padStart(3, '0')}`
