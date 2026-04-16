@@ -218,12 +218,12 @@ export default function BulkOperationsPage() {
         </div>
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 text-center">
           <p className="text-sm text-blue-800">ℹ No recently imported assets found.</p>
-          <p className="text-xs text-blue-700 mt-1">Import some assets first, then you can bulk update or delete them here.</p>
+          <p className="text-xs text-blue-700 mt-1">Receive some stock first, then you can bulk update or delete assets here.</p>
           <a
-            href="/import"
+            href="/receiving-stock"
             className="inline-block mt-3 text-sm bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
           >
-            Go to Import →
+            Go to Receive stock →
           </a>
         </div>
       </div>

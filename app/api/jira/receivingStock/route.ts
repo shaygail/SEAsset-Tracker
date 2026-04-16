@@ -82,6 +82,7 @@ export async function POST(req: NextRequest) {
     failedCount,
     objectKeys,
     assetTypes: assetTypeCount,
+    source: 'receiving-stock',
     failedAssets:
       failedCount > 0
         ? results

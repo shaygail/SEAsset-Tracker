@@ -2,20 +2,19 @@
 
 import { useEffect, useState } from 'react'
 
-interface ImportHistoryEntry {
+interface ReceiveStockHistoryEntry {
   timestamp: string
   assetCount: number
   successCount: number
   failedCount: number
   objectKeys: string[]
   assetTypes: Record<string, number>
-  /** Failed assets with their error messages */
   failedAssets?: Array<{ assetTag: string; error: string }>
   notes?: string
 }
 
-export default function ImportHistoryPage() {
-  const [history, setHistory] = useState<ImportHistoryEntry[]>([])
+export default function ReceivingStockHistoryPage() {
+  const [history, setHistory] = useState<ReceiveStockHistoryEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
@@ -23,7 +22,7 @@ export default function ImportHistoryPage() {
   useEffect(() => {
     async function fetchHistory() {
       try {
-        const resp = await fetch('/api/importHistory')
+        const resp = await fetch('/api/receivingStockHistory')
         const data = await resp.json()
         if (!resp.ok) throw new Error(data.error || 'Failed to load history')
         setHistory(data.history || [])
@@ -53,7 +52,7 @@ export default function ImportHistoryPage() {
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
         </svg>
-        <span className="text-sm font-medium">Loading import history…</span>
+        <span className="text-sm font-medium">Loading receive stock history…</span>
       </div>
     )
   }
@@ -71,12 +70,14 @@ export default function ImportHistoryPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Import History</h1>
-          <p className="mt-1 text-sm text-gray-500">Track all asset imports</p>
+          <h1 className="text-2xl font-bold text-gray-900">Receive stock history</h1>
+          <p className="mt-1 text-sm text-gray-500">Batches created from the Receive stock flow</p>
         </div>
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 text-center">
-          <p className="text-sm text-blue-800">ℹ No imports yet.</p>
-          <p className="text-xs text-blue-700 mt-1">Start by receiving stock from the Receive stock page.</p>
+          <p className="text-sm text-blue-800">ℹ No receive stock batches recorded yet.</p>
+          <p className="text-xs text-blue-700 mt-1">
+            New submissions are logged here. Older activity from before this feature was added will not appear.
+          </p>
           <a
             href="/receiving-stock"
             className="inline-block mt-3 text-sm bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
@@ -88,42 +89,34 @@ export default function ImportHistoryPage() {
     )
   }
 
+  const totalAssets = history.reduce((sum, h) => sum + h.assetCount, 0)
+  const totalSuccess = history.reduce((sum, h) => sum + h.successCount, 0)
+  const successRate = totalAssets > 0 ? ((totalSuccess / totalAssets) * 100).toFixed(0) : '0'
+
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Import History</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Receive stock history</h1>
         <p className="mt-1 text-sm text-gray-500">
-          {history.length} import batch{history.length !== 1 ? 'es' : ''} recorded
+          {history.length} batch{history.length !== 1 ? 'es' : ''} from Receive stock
         </p>
       </div>
 
-      {/* Summary stats */}
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-xs font-semibold text-gray-500 uppercase">Total Imports</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase">Total batches</p>
           <p className="text-2xl font-bold text-gray-900 mt-1">{history.length}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-xs font-semibold text-gray-500 uppercase">Total Assets</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">
-            {history.reduce((sum, h) => sum + h.assetCount, 0)}
-          </p>
+          <p className="text-xs font-semibold text-gray-500 uppercase">Total assets</p>
+          <p className="text-2xl font-bold text-gray-900 mt-1">{totalAssets}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-xs font-semibold text-gray-500 uppercase">Success Rate</p>
-          <p className="text-2xl font-bold text-green-600 mt-1">
-            {(
-              (history.reduce((sum, h) => sum + h.successCount, 0) /
-                history.reduce((sum, h) => sum + h.assetCount, 0)) *
-              100
-            ).toFixed(0)}
-            %
-          </p>
+          <p className="text-xs font-semibold text-gray-500 uppercase">Success rate</p>
+          <p className="text-2xl font-bold text-green-600 mt-1">{successRate}%</p>
         </div>
       </div>
 
-      {/* Import batches */}
       <div className="space-y-3">
         {history.map((entry) => {
           const isExpanded = expandedRows.has(entry.timestamp)
@@ -135,7 +128,6 @@ export default function ImportHistoryPage() {
 
           return (
             <div key={entry.timestamp} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              {/* Header */}
               <button
                 onClick={() => toggleExpanded(entry.timestamp)}
                 className="w-full flex items-center justify-between gap-4 px-6 py-4 hover:bg-gray-50 transition-colors text-left"
@@ -164,7 +156,6 @@ export default function ImportHistoryPage() {
                   <div className="text-right">
                     <p className="text-sm font-semibold text-gray-900">{entry.assetCount} assets</p>
                     <p className="text-xs text-gray-500">
-                      {' '}
                       <span className="text-green-600">✓ {entry.successCount}</span>
                       {entry.failedCount > 0 && <span className="text-red-600 ml-2">✗ {entry.failedCount}</span>}
                     </p>
@@ -182,12 +173,10 @@ export default function ImportHistoryPage() {
                 </div>
               </button>
 
-              {/* Expanded content */}
               {isExpanded && (
                 <div className="border-t border-gray-200 bg-gray-50 px-6 py-4 space-y-4">
-                  {/* Asset type breakdown */}
                   <div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Asset Types</p>
+                    <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Asset types</p>
                     <div className="flex flex-wrap gap-2">
                       {Object.entries(entry.assetTypes)
                         .sort((a, b) => b[1] - a[1])
@@ -202,10 +191,9 @@ export default function ImportHistoryPage() {
                     </div>
                   </div>
 
-                  {/* Asset keys list */}
                   <div>
                     <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
-                      Imported Assets ({entry.objectKeys.length})
+                      Created assets ({entry.objectKeys.length})
                     </p>
                     <div className="bg-white rounded-lg border border-gray-200 max-h-48 overflow-y-auto">
                       <div className="flex flex-wrap gap-2 p-3">
@@ -225,11 +213,10 @@ export default function ImportHistoryPage() {
                     </div>
                   </div>
 
-                  {/* Failed assets with errors */}
                   {entry.failedAssets && entry.failedAssets.length > 0 && (
                     <div>
                       <p className="text-xs font-semibold text-red-600 uppercase mb-2">
-                        Failed Assets ({entry.failedAssets.length})
+                        Failed ({entry.failedAssets.length})
                       </p>
                       <div className="bg-white rounded-lg border border-red-200 max-h-48 overflow-y-auto">
                         <div className="divide-y divide-red-100">
@@ -244,30 +231,6 @@ export default function ImportHistoryPage() {
                     </div>
                   )}
 
-                  {/* Asset keys list */}
-                  <div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
-                      Imported Assets ({entry.objectKeys.length})
-                    </p>
-                    <div className="bg-white rounded-lg border border-gray-200 max-h-48 overflow-y-auto">
-                      <div className="flex flex-wrap gap-2 p-3">
-                        {entry.objectKeys.map((key) => (
-                          <a
-                            key={key}
-                            href={`/asset/${key}`}
-                            className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-md transition-colors"
-                          >
-                            {key}
-                            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                          </a>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Notes */}
                   {entry.notes && (
                     <div className="text-xs text-gray-600 bg-white rounded-lg border border-gray-200 p-3">
                       <p className="font-semibold text-gray-700 mb-1">Notes</p>

@@ -7,9 +7,8 @@ import SignOutButton from "./SignOutButton";
 const NAV_LINKS = [
   { href: "/", label: "Search" },
   { href: "/dashboard", label: "Dashboard" },
-  { href: "/import", label: "Import" },
   { href: "/receiving-stock", label: "Receive stock" },
-  { href: "/import-history", label: "History" },
+  { href: "/receiving-stock/history", label: "Receive history" },
   { href: "/bulk-operations", label: "Bulk Ops" },
 ];
 

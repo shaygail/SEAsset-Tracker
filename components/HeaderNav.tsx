@@ -17,14 +17,11 @@ export default function HeaderNav({ session }: { session: any }) {
           <Link href="/dashboard" className="text-blue-100 hover:text-white transition-colors px-1 py-1 rounded-md hover:bg-white/10">
             Dashboard
           </Link>
-          <Link href="/import" className="text-blue-100 hover:text-white transition-colors px-1 py-1 rounded-md hover:bg-white/10">
-            Import
-          </Link>
           <Link href="/receiving-stock" className="text-blue-100 hover:text-white transition-colors px-1 py-1 rounded-md hover:bg-white/10">
             Receive stock
           </Link>
-          <Link href="/import-history" className="text-blue-100 hover:text-white transition-colors px-1 py-1 rounded-md hover:bg-white/10">
-            History
+          <Link href="/receiving-stock/history" className="text-blue-100 hover:text-white transition-colors px-1 py-1 rounded-md hover:bg-white/10">
+            Receive history
           </Link>
           <Link href="/bulk-operations" className="text-blue-100 hover:text-white transition-colors px-1 py-1 rounded-md hover:bg-white/10">
             Bulk Ops

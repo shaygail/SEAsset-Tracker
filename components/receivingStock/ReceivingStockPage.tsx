@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { addRecentlyImported } from '@/lib/recentlyImported'
 import { buildReceivingStockPayload } from '@/lib/receivingStock/buildReceivingStockPayload'
@@ -268,9 +267,6 @@ export default function ReceivingStockPage() {
             — without CSV files. Dates, status, titles, and phone fields are normalized the same way as bulk CSV import.
           </p>
         </div>
-        <Link href="/import" className="text-sm text-blue-700 hover:text-blue-900 underline shrink-0">
-          Prefer CSV? Bulk import →
-        </Link>
       </div>
 
       {successCount !== null && successCount > 0 && (

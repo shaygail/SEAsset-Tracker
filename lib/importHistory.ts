@@ -1,7 +1,9 @@
 import fs from 'fs'
 import path from 'path'
 
-interface ImportHistoryEntry {
+export type ImportHistorySource = 'csv' | 'receiving-stock'
+
+export interface ImportHistoryEntry {
   timestamp: string
   assetCount: number
   successCount: number
@@ -11,6 +13,8 @@ interface ImportHistoryEntry {
   /** Failed assets with their error messages */
   failedAssets?: Array<{ assetTag: string; error: string }>
   notes?: string
+  /** How the batch was created (older log lines may omit this field). */
+  source?: ImportHistorySource
 }
 
 const LOG_FILE = path.join(process.cwd(), 'logs', 'imports.jsonl')
@@ -57,6 +61,13 @@ export function getImportHistory(): ImportHistoryEntry[] {
     console.error('[importHistory] Failed to read log:', err)
     return []
   }
+}
+
+/**
+ * Batches created via Receive stock only (excludes CSV bulk import).
+ */
+export function getReceivingStockHistory(): ImportHistoryEntry[] {
+  return getImportHistory().filter((e) => e.source === 'receiving-stock')
 }
 
 /**

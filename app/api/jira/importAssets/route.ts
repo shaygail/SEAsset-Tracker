@@ -122,6 +122,7 @@ export async function POST(req: NextRequest) {
     failedCount,
     objectKeys,
     assetTypes: assetTypeCount,
+    source: 'csv',
     failedAssets: failedAssets.length > 0 ? failedAssets : undefined,
   })
 
