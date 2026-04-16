@@ -102,5 +102,6 @@ export const COMMON_MANUFACTURERS: string[] = [
   'Jabra',
   'Philips',
   'Neat',
+  'Yealink',
   'Other',
 ]
